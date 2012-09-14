@@ -19,60 +19,50 @@ package com.sugree.twitter;
 import twitter4j.TwitterException;
 import twitter4j.auth.AccessToken;
 import twitter4j.auth.RequestToken;
+import android.annotation.SuppressLint;
 import android.app.Dialog;
 import android.app.ProgressDialog;
 import android.content.Context;
-import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Color;
-import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
-import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
-import android.view.Display;
+import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewGroup.LayoutParams;
 import android.view.Window;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.TextView;
 
 import com.sugree.twitter.Twitter.DialogListener;
 
 public class TwDialog extends Dialog {
-	public static final String TAG = "twitter";
+	private static final String TAG = "twitter";
 
-	static final int TW_BLUE = 0xFFC0DEED;
-	static final float[] DIMENSIONS_LANDSCAPE = { 460, 260 };
-	static final float[] DIMENSIONS_PORTRAIT = { 280, 420 };
-	static final FrameLayout.LayoutParams FILL = new FrameLayout.LayoutParams(
-			ViewGroup.LayoutParams.FILL_PARENT,
-			ViewGroup.LayoutParams.FILL_PARENT);
-	static final int MARGIN = 4;
-	static final int PADDING = 2;
+	private static final FrameLayout.LayoutParams FILL = new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.FILL_PARENT, ViewGroup.LayoutParams.FILL_PARENT);
 
-	private int mIcon;
 	private String mUrl;
-	private DialogListener mListener;
+	private final DialogListener mListener;
 	private ProgressDialog mSpinner;
+	private ImageView mCrossImage;
 	private WebView mWebView;
 	private LinearLayout mContent;
-	private TextView mTitle;
-	private Handler mHandler;
+	private final Handler mHandler;
 
-	private twitter4j.Twitter mTwitter;
+	private final twitter4j.Twitter mTwitter;
 
 	private RequestToken mRequestToken;
 
-	public TwDialog(Context context, twitter4j.Twitter twitter,
-			DialogListener listener, int icon) {
-		super(context);
+	public TwDialog(Context context, twitter4j.Twitter twitter, DialogListener listener) {
+		super(context, android.R.style.Theme_Translucent_NoTitleBar);
 		mTwitter = twitter;
 		mListener = listener;
-		mIcon = icon;
 		mHandler = new Handler();
 	}
 
@@ -83,44 +73,61 @@ public class TwDialog extends Dialog {
 		mSpinner.requestWindowFeature(Window.FEATURE_NO_TITLE);
 		mSpinner.setMessage("Loading...");
 
+		requestWindowFeature(Window.FEATURE_NO_TITLE);
 		mContent = new LinearLayout(getContext());
-		mContent.setOrientation(LinearLayout.VERTICAL);
-		setUpTitle();
-		setUpWebView();
 
-		Display display = getWindow().getWindowManager().getDefaultDisplay();
-		final float scale = getContext().getResources().getDisplayMetrics().density;
-		float[] dimensions = display.getWidth() < display.getHeight() ? DIMENSIONS_PORTRAIT
-				: DIMENSIONS_LANDSCAPE;
-		addContentView(mContent, new FrameLayout.LayoutParams(
-				(int) (dimensions[0] * scale + 0.5f), (int) (dimensions[1]
-						* scale + 0.5f)));
+		// Create the 'x' image, but don't add to the mContent layout yet at this point, we only need to know its
+		// drawable width and height to place the webview
+		createCrossImage();
+
+		// Now we know 'x' drawable width and height, layout the webivew and add it the mContent layout
+		int crossWidth = mCrossImage.getDrawable().getIntrinsicWidth();
+		setUpWebView(crossWidth / 2);
+
+		// Finally add the 'x' image to the mContent layout and add mContent to the Dialog view
+		mContent.addView(mCrossImage, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
+		addContentView(mContent, new LayoutParams(LayoutParams.FILL_PARENT, LayoutParams.FILL_PARENT));
 
 		retrieveRequestToken();
 	}
 
-	@Override
-	public void show() {
-		super.show();
-		mSpinner.show();
+	private void createCrossImage() {
+		mCrossImage = new ImageView(getContext());
+		// Dismiss the dialog when user click on the 'x'
+		mCrossImage.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				mListener.onCancel();
+				TwDialog.this.dismiss();
+			}
+		});
+		Drawable crossDrawable = getContext().getResources().getDrawable(R.drawable.close);
+		mCrossImage.setImageDrawable(crossDrawable);
+		// 'x' should not be visible while webview is loading make it visible only after webview has fully loaded
+		mCrossImage.setVisibility(View.INVISIBLE);
 	}
 
-	private void setUpTitle() {
-		requestWindowFeature(Window.FEATURE_NO_TITLE);
-		Drawable icon = getContext().getResources().getDrawable(mIcon);
-		mTitle = new TextView(getContext());
-		mTitle.setText("Twitter");
-		mTitle.setTextColor(Color.WHITE);
-		mTitle.setTypeface(Typeface.DEFAULT_BOLD);
-		mTitle.setBackgroundColor(TW_BLUE);
-		mTitle.setPadding(MARGIN + PADDING, MARGIN, MARGIN, MARGIN);
-		mTitle.setCompoundDrawablePadding(MARGIN + PADDING);
-		mTitle.setCompoundDrawablesWithIntrinsicBounds(icon, null, null, null);
-		mContent.addView(mTitle);
+	@SuppressLint("SetJavaScriptEnabled")
+	private void setUpWebView(int margin) {
+		LinearLayout webViewContainer = new LinearLayout(getContext());
+		mWebView = new WebView(getContext());
+		mWebView.setVerticalScrollBarEnabled(false);
+		mWebView.setHorizontalScrollBarEnabled(false);
+		mWebView.setWebViewClient(new TwDialog.TwWebViewClient());
+		mWebView.getSettings().setJavaScriptEnabled(true);
+		mWebView.setLayoutParams(FILL);
+		mWebView.setVisibility(View.INVISIBLE);
+		mWebView.getSettings().setSavePassword(false);
+
+		webViewContainer.setPadding(margin, margin, margin, margin);
+		webViewContainer.addView(mWebView);
+		mContent.addView(webViewContainer);
 	}
 
 	private void retrieveRequestToken() {
-		mSpinner.show();
+		if (!mSpinner.isShowing()) {
+			mSpinner.show();
+		}
 		new Thread() {
 			@Override
 			public void run() {
@@ -128,33 +135,40 @@ public class TwDialog extends Dialog {
 					mRequestToken = mTwitter.getOAuthRequestToken(Twitter.CALLBACK_URI);
 					mUrl = mRequestToken.getAuthorizationURL();
 					mWebView.loadUrl(mUrl);
-
 				} catch (TwitterException e) {
-					mListener.onError(new DialogError(e.getMessage(), -1,
-							Twitter.OAUTH_REQUEST_TOKEN));
+					mListener.onError(new DialogError(e.getMessage(), -1, Twitter.OAUTH_REQUEST_TOKEN));
+					mHandler.post(new Runnable() {
+						@Override
+						public void run() {
+							TwDialog.this.dismiss();
+						}
+					});
 				}
 			}
 		}.start();
 	}
 
 	private void retrieveAccessToken(final String url) {
-		mSpinner.show();
+		if (!mSpinner.isShowing()) {
+			mSpinner.show();
+		}
 		new Thread() {
 			@Override
 			public void run() {
 				final Bundle values = new Bundle();
 				try {
-					AccessToken at = mTwitter
-							.getOAuthAccessToken(mRequestToken);
+					AccessToken at = mTwitter.getOAuthAccessToken(mRequestToken);
 					values.putString(Twitter.ACCESS_TOKEN, at.getToken());
 					values.putString(Twitter.SECRET_TOKEN, at.getTokenSecret());
+					values.putLong(Twitter.USER_ID, at.getUserId());
+					values.putString(Twitter.SCREEN_NAME, at.getScreenName());
 					mListener.onComplete(values);
 				} catch (TwitterException e) {
 					mListener.onTwitterError(new TwitterError(e.getMessage()));
 				}
 				mHandler.post(new Runnable() {
+					@Override
 					public void run() {
-						mSpinner.dismiss();
 						TwDialog.this.dismiss();
 					}
 				});
@@ -162,22 +176,10 @@ public class TwDialog extends Dialog {
 		}.start();
 	}
 
-	private void setUpWebView() {
-		mWebView = new WebView(getContext());
-		mWebView.setVerticalScrollBarEnabled(false);
-		mWebView.setHorizontalScrollBarEnabled(false);
-		mWebView.setWebViewClient(new TwDialog.TwWebViewClient());
-		mWebView.getSettings().setJavaScriptEnabled(true);
-		// mWebView.loadUrl(mUrl);
-		mWebView.setLayoutParams(FILL);
-		mContent.addView(mWebView);
-	}
-
 	private class TwWebViewClient extends WebViewClient {
-
 		@Override
 		public boolean shouldOverrideUrlLoading(WebView view, String url) {
-			Log.d(TAG, "Redirect URL: " + url);
+			Log.d(TAG, "Override URL: " + url);
 			if (url.startsWith(Twitter.CALLBACK_URI)) {
 				retrieveAccessToken(url);
 				return true;
@@ -186,18 +188,13 @@ public class TwDialog extends Dialog {
 				TwDialog.this.dismiss();
 				return true;
 			}
-			// launch non-dialog URLs in a full browser
-			getContext().startActivity(
-					new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
-			return true;
+			return false;
 		}
 
 		@Override
-		public void onReceivedError(WebView view, int errorCode,
-				String description, String failingUrl) {
+		public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
 			super.onReceivedError(view, errorCode, description, failingUrl);
-			mListener.onError(new DialogError(description, errorCode,
-					failingUrl));
+			mListener.onError(new DialogError(description, errorCode, failingUrl));
 			TwDialog.this.dismiss();
 		}
 
@@ -205,21 +202,20 @@ public class TwDialog extends Dialog {
 		public void onPageStarted(WebView view, String url, Bitmap favicon) {
 			Log.d(TAG, "WebView loading URL: " + url);
 			super.onPageStarted(view, url, favicon);
-			if (mSpinner.isShowing()) {
-				mSpinner.dismiss();
+			if (!mSpinner.isShowing()) {
+				mSpinner.show();
 			}
-			mSpinner.show();
 		}
 
 		@Override
 		public void onPageFinished(WebView view, String url) {
 			super.onPageFinished(view, url);
-			String title = mWebView.getTitle();
-			if (title != null && title.length() > 0) {
-				mTitle.setText(title);
-			}
 			mSpinner.dismiss();
+			// Once webview is fully loaded, set the mContent background to be transparent and make visible the 'x'
+			// image.
+			mContent.setBackgroundColor(Color.TRANSPARENT);
+			mWebView.setVisibility(View.VISIBLE);
+			mCrossImage.setVisibility(View.VISIBLE);
 		}
-
 	}
 }

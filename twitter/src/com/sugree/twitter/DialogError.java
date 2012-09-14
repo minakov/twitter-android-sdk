@@ -1,24 +1,22 @@
 package com.sugree.twitter;
 
 public class DialogError extends Throwable {
-
 	private static final long serialVersionUID = -992704825747001028L;
-	
-	private int mErrorCode;
-	private String mFailingUrl;
-	
+
+	private final int errorCode;
+	private final String failingUrl;
+
 	public DialogError(String message, int errorCode, String failingUrl) {
 		super(message);
-		mErrorCode = errorCode;
-		mFailingUrl = failingUrl;
+		this.errorCode = errorCode;
+		this.failingUrl = failingUrl;
 	}
 
 	public int getErrorCode() {
-		return mErrorCode;
+		return errorCode;
 	}
 
 	public String getFailingUrl() {
-		return mFailingUrl;
+		return failingUrl;
 	}
-
 }
