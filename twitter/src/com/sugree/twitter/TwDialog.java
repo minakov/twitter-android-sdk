@@ -21,137 +21,100 @@ import twitter4j.auth.AccessToken;
 import twitter4j.auth.RequestToken;
 import android.annotation.SuppressLint;
 import android.app.Dialog;
-import android.app.ProgressDialog;
 import android.content.Context;
 import android.graphics.Bitmap;
-import android.graphics.Color;
-import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
-import android.view.View;
-import android.view.ViewGroup;
+import android.view.Display;
 import android.view.ViewGroup.LayoutParams;
 import android.view.Window;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
-import android.widget.LinearLayout;
 
 import com.sugree.twitter.Twitter.DialogListener;
 
+@SuppressLint("SetJavaScriptEnabled")
 public class TwDialog extends Dialog {
 	private static final String TAG = "twitter";
-
+	private static final float[] DIMENSIONS_LANDSCAPE = { 460, 260 };
+	private static final float[] DIMENSIONS_PORTRAIT = { 280, 430 };
 	private static final FrameLayout.LayoutParams FILL = new FrameLayout.LayoutParams(
-			ViewGroup.LayoutParams.FILL_PARENT, ViewGroup.LayoutParams.FILL_PARENT);
+			FrameLayout.LayoutParams.FILL_PARENT, FrameLayout.LayoutParams.FILL_PARENT);
 
-	private String mUrl;
+	private final String mUrl;
 	private final DialogListener mListener;
-	private ProgressDialog mSpinner;
-	private ImageView mCrossImage;
-	private WebView mWebView;
-	private LinearLayout mContent;
+	// private ProgressDialog mSpinner;
 	private final Handler mHandler;
 
 	private final twitter4j.Twitter mTwitter;
 
 	private RequestToken mRequestToken;
 
-	public TwDialog(Context context, twitter4j.Twitter twitter, DialogListener listener) {
-		super(context, android.R.style.Theme_Translucent_NoTitleBar);
+	public TwDialog(Context context, String url, twitter4j.Twitter twitter, Handler handler, DialogListener listener) {
+		super(context, 0);
+		mUrl = url;
 		mTwitter = twitter;
+		mHandler = handler;
 		mListener = listener;
-		mHandler = new Handler();
 	}
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
-		mSpinner = new ProgressDialog(getContext());
-		mSpinner.requestWindowFeature(Window.FEATURE_NO_TITLE);
-		mSpinner.setMessage("Loading...");
+		// mSpinner = new ProgressDialog(getContext());
+		// mSpinner.requestWindowFeature(Window.FEATURE_NO_TITLE);
+		// mSpinner.setMessage("Loading...");
 
 		requestWindowFeature(Window.FEATURE_NO_TITLE);
-		mContent = new LinearLayout(getContext());
 
-		// Create the 'x' image, but don't add to the mContent layout yet at this point, we only need to know its
-		// drawable width and height to place the webview
-		createCrossImage();
+		final WebView webView = new WebView(getContext());
+		webView.setVerticalScrollBarEnabled(false);
+		webView.setHorizontalScrollBarEnabled(false);
+		webView.setWebViewClient(new TwDialog.TwWebViewClient());
+		webView.getSettings().setJavaScriptEnabled(true);
+		webView.loadUrl(mUrl);
+		webView.setLayoutParams(FILL);
+		webView.getSettings().setSavePassword(false);
 
-		// Now we know 'x' drawable width and height, layout the webivew and add it the mContent layout
-		int crossWidth = mCrossImage.getDrawable().getIntrinsicWidth();
-		setUpWebView(crossWidth / 2);
-
-		// Finally add the 'x' image to the mContent layout and add mContent to the Dialog view
-		mContent.addView(mCrossImage, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
-		addContentView(mContent, new LayoutParams(LayoutParams.FILL_PARENT, LayoutParams.FILL_PARENT));
-
-		retrieveRequestToken();
+		Display display = getWindow().getWindowManager().getDefaultDisplay();
+		final float scale = getContext().getResources().getDisplayMetrics().density;
+		float[] dimensions = display.getWidth() < display.getHeight() ? DIMENSIONS_PORTRAIT : DIMENSIONS_LANDSCAPE;
+		final int w = (int) (dimensions[0] * scale + 0.5f);
+		final int h = (int) (dimensions[1] * scale + 0.5f);
+		addContentView(webView, new LayoutParams(w, h));
 	}
 
-	private void createCrossImage() {
-		mCrossImage = new ImageView(getContext());
-		// Dismiss the dialog when user click on the 'x'
-		mCrossImage.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				mListener.onCancel();
-				TwDialog.this.dismiss();
-			}
-		});
-		Drawable crossDrawable = getContext().getResources().getDrawable(R.drawable.close);
-		mCrossImage.setImageDrawable(crossDrawable);
-		// 'x' should not be visible while webview is loading make it visible only after webview has fully loaded
-		mCrossImage.setVisibility(View.INVISIBLE);
-	}
-
-	@SuppressLint("SetJavaScriptEnabled")
-	private void setUpWebView(int margin) {
-		LinearLayout webViewContainer = new LinearLayout(getContext());
-		mWebView = new WebView(getContext());
-		mWebView.setVerticalScrollBarEnabled(false);
-		mWebView.setHorizontalScrollBarEnabled(false);
-		mWebView.setWebViewClient(new TwDialog.TwWebViewClient());
-		mWebView.getSettings().setJavaScriptEnabled(true);
-		mWebView.setLayoutParams(FILL);
-		mWebView.setVisibility(View.INVISIBLE);
-		mWebView.getSettings().setSavePassword(false);
-
-		webViewContainer.setPadding(margin, margin, margin, margin);
-		webViewContainer.addView(mWebView);
-		mContent.addView(webViewContainer);
-	}
-
-	private void retrieveRequestToken() {
-		if (!mSpinner.isShowing()) {
-			mSpinner.show();
-		}
-		new Thread() {
-			@Override
-			public void run() {
-				try {
-					mRequestToken = mTwitter.getOAuthRequestToken(Twitter.CALLBACK_URI);
-					mUrl = mRequestToken.getAuthorizationURL();
-					mWebView.loadUrl(mUrl);
-				} catch (TwitterException e) {
-					mListener.onError(new DialogError(e.getMessage(), -1, Twitter.OAUTH_REQUEST_TOKEN));
-					mHandler.post(new Runnable() {
-						@Override
-						public void run() {
-							TwDialog.this.dismiss();
-						}
-					});
-				}
-			}
-		}.start();
-	}
+	// private void retrieveRequestToken() {
+	// if (!mSpinner.isShowing()) {
+	// mSpinner.show();
+	// }
+	// new Thread() {
+	// @Override
+	// public void run() {
+	// try {
+	// mRequestToken = mTwitter.getOAuthRequestToken(Twitter.CALLBACK_URI);
+	// mUrl = mRequestToken.getAuthorizationURL();
+	// mWebView.loadUrl(mUrl);
+	// } catch (TwitterException e) {
+	// mListener.onError(new DialogError(e.getMessage(), -1, Twitter.OAUTH_REQUEST_TOKEN));
+	// mHandler.post(new Runnable() {
+	// @Override
+	// public void run() {
+	// mSpinner.dismiss();
+	// TwDialog.this.dismiss();
+	// }
+	// });
+	// }
+	// }
+	// }.start();
+	// }
 
 	private void retrieveAccessToken(final String url) {
-		if (!mSpinner.isShowing()) {
-			mSpinner.show();
-		}
+		// if (!mSpinner.isShowing()) {
+		// mSpinner.show();
+		// }
 		new Thread() {
 			@Override
 			public void run() {
@@ -169,6 +132,7 @@ public class TwDialog extends Dialog {
 				mHandler.post(new Runnable() {
 					@Override
 					public void run() {
+						// mSpinner.dismiss();
 						TwDialog.this.dismiss();
 					}
 				});
@@ -195,27 +159,29 @@ public class TwDialog extends Dialog {
 		public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
 			super.onReceivedError(view, errorCode, description, failingUrl);
 			mListener.onError(new DialogError(description, errorCode, failingUrl));
+			// mSpinner.dismiss();
 			TwDialog.this.dismiss();
 		}
 
 		@Override
 		public void onPageStarted(WebView view, String url, Bitmap favicon) {
-			Log.d(TAG, "WebView loading URL: " + url);
+			Log.d(TAG, "WebView started URL: " + url);
 			super.onPageStarted(view, url, favicon);
-			if (!mSpinner.isShowing()) {
-				mSpinner.show();
-			}
+			// if (!mSpinner.isShowing()) {
+			// mSpinner.show();
+			// }
 		}
 
 		@Override
 		public void onPageFinished(WebView view, String url) {
+			Log.d(TAG, "WebView finished URL: " + url);
 			super.onPageFinished(view, url);
-			mSpinner.dismiss();
+			// mSpinner.dismiss();
 			// Once webview is fully loaded, set the mContent background to be transparent and make visible the 'x'
 			// image.
-			mContent.setBackgroundColor(Color.TRANSPARENT);
-			mWebView.setVisibility(View.VISIBLE);
-			mCrossImage.setVisibility(View.VISIBLE);
+			// mContent.setBackgroundColor(Color.TRANSPARENT);
+			// mWebView.setVisibility(View.VISIBLE);
+			// mCrossImage.setVisibility(View.VISIBLE);
 		}
 	}
 }

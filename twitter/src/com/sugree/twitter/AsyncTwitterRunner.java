@@ -20,6 +20,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.MalformedURLException;
 
+import twitter4j.TwitterException;
 import android.content.Context;
 
 /**
@@ -45,6 +46,55 @@ public class AsyncTwitterRunner {
 		this.twitter = twitter;
 	}
 
+	public void retrieveRequestToken(final RequestListener listener) {
+		new Thread() {
+			@Override
+			public void run() {
+				try {
+					final String response = twitter.retrieveRequestToken();
+					listener.onComplete(response);
+				} catch (TwitterException e) {
+					TwitterError error = new TwitterError(e.getMessage());
+					error.initCause(e);
+					listener.onTwitterError(error);
+				}
+			}
+		}.start();
+	}
+
+	public void retrieveAccessToken(final RequestListener listener) {
+		new Thread() {
+			@Override
+			public void run() {
+				try {
+					twitter.retrieveAccessToken();
+					listener.onComplete(null);
+				} catch (TwitterException e) {
+					TwitterError error = new TwitterError(e.getMessage());
+					error.initCause(e);
+					listener.onTwitterError(error);
+				}
+			}
+		}.start();
+	}
+
+	public void retrieveProfile(final RequestListener listener) {
+		new Thread() {
+			@Override
+			public void run() {
+				try {
+					twitter.retrieveAccessToken();
+					twitter.requestProfileImage();
+					listener.onComplete(null);
+				} catch (TwitterException e) {
+					TwitterError error = new TwitterError(e.getMessage());
+					error.initCause(e);
+					listener.onTwitterError(error);
+				}
+			}
+		}.start();
+	}
+
 	/**
 	 * Invalidate the current user session by removing the access token in memory, clearing the browser cookies. The
 	 * application will be notified when logout is complete via the callback interface.
@@ -64,24 +114,6 @@ public class AsyncTwitterRunner {
 			public void run() {
 				twitter.logout(context);
 				listener.onComplete(null);
-			}
-		}.start();
-	}
-
-	/**
-	 * Note that this method is asynchronous and the callback will be invoked in a background thread; operations that
-	 * affect the UI will need to be posted to the UI thread or an appropriate handler.
-	 * 
-	 * @param context
-	 *            The Android context in which the logout should be called: it should be the same context in which the
-	 *            login occurred in order to clear any stored cookies
-	 * @param listener
-	 *            Callback interface to notify the application when the request has completed.
-	 */
-	public void requestProfileImage(final Context context, final RequestListener listener) {
-		new Thread() {
-			@Override
-			public void run() {
 			}
 		}.start();
 	}

@@ -1,6 +1,10 @@
 package com.sugree.twitter;
 
+import twitter4j.ProfileImage;
+import twitter4j.TwitterException;
 import twitter4j.TwitterFactory;
+import twitter4j.auth.AccessToken;
+import twitter4j.auth.RequestToken;
 import android.Manifest;
 import android.app.AlertDialog;
 import android.content.Context;
@@ -14,33 +18,56 @@ import android.webkit.CookieSyncManager;
 public class Twitter {
 	private static final String TAG = "twitter";
 
-	protected static final String CALLBACK_URI = "x-oauthflow-twitter://callback";
+	public static final String CALLBACK_URI = "x-oauthflow-twitter://callback";
 	protected static final String CANCEL_URI = "twitter://cancel";
 
 	protected static final String ACCESS_TOKEN = "access_token";
 	protected static final String SECRET_TOKEN = "secret_token";
 	protected static final String USER_ID = "user_id";
 	protected static final String SCREEN_NAME = "screen_name";
+	protected static final String PROFILE_IMAGE_URL = "profile_image_url";
 
-	protected static String REQUEST_ENDPOINT = "https://api.twitter.com/1";
+	protected static final String REQUEST_ENDPOINT = "https://api.twitter.com/1";
 
-	protected static String OAUTH_REQUEST_TOKEN = "https://api.twitter.com/oauth/request_token";
-	protected static String OAUTH_ACCESS_TOKEN = "https://api.twitter.com/oauth/access_token";
-	protected static String OAUTH_AUTHORIZE = "https://api.twitter.com/oauth/authorize";
+	protected static final String OAUTH_REQUEST_TOKEN = "https://api.twitter.com/oauth/request_token";
+	protected static final String OAUTH_ACCESS_TOKEN = "https://api.twitter.com/oauth/access_token";
+	protected static final String OAUTH_AUTHORIZE = "https://api.twitter.com/oauth/authorize";
 
+	private RequestToken requestToken;
 	private String accessToken;
 	private String secretToken;
 	private long userId;
 	private String screenName;
+	private String profileImageUrl;
 
-	private twitter4j.Twitter mTwitter;
+	private final twitter4j.Twitter twitter;
 
-	public void authorize(Context ctx, Handler handler, String consumerKey, String consumerSecret,
-			final DialogListener listener) {
-		mTwitter = new TwitterFactory().getInstance();
-		mTwitter.setOAuthConsumer(consumerKey, consumerSecret);
+	public Twitter(String consumerKey, String consumerSecret) {
+		twitter = new TwitterFactory().getInstance();
+		twitter.setOAuthConsumer(consumerKey, consumerSecret);
+	}
+
+	public String retrieveRequestToken() throws TwitterException {
+		requestToken = twitter.getOAuthRequestToken(Twitter.CALLBACK_URI);
+		return requestToken.getAuthorizationURL();
+	}
+
+	public void retrieveAccessToken() throws TwitterException {
+		AccessToken at = twitter.getOAuthAccessToken(requestToken);
+		accessToken = at.getToken();
+		secretToken = at.getTokenSecret();
+		userId = at.getUserId();
+		screenName = at.getScreenName();
+	}
+
+	public void requestProfileImage() throws TwitterException {
+		ProfileImage image = twitter.getProfileImage(screenName, ProfileImage.NORMAL);
+		profileImageUrl = image.getURL();
+	}
+
+	public void authorize(Context ctx, String url, Handler handler, final DialogListener listener) {
 		CookieSyncManager.createInstance(ctx);
-		dialog(ctx, handler, new DialogListener() {
+		dialog(ctx, url, handler, new DialogListener() {
 
 			@Override
 			public void onComplete(Bundle values) {
@@ -88,7 +115,7 @@ public class Twitter {
 		setSecretToken(null);
 	}
 
-	private void dialog(final Context ctx, Handler handler, final DialogListener listener) {
+	private void dialog(final Context ctx, String url, Handler handler, final DialogListener listener) {
 		if (ctx.checkCallingOrSelfPermission(Manifest.permission.INTERNET) != PackageManager.PERMISSION_GRANTED) {
 			AlertDialog.Builder alertBuilder = new AlertDialog.Builder(ctx);
 			alertBuilder.setTitle("Error");
@@ -96,7 +123,7 @@ public class Twitter {
 			alertBuilder.show();
 			return;
 		}
-		new TwDialog(ctx, mTwitter, listener).show();
+		new TwDialog(ctx, url, twitter, handler, listener).show();
 	}
 
 	public boolean isSessionValid() {
@@ -133,6 +160,10 @@ public class Twitter {
 
 	public void setScreenName(String screenName) {
 		this.screenName = screenName;
+	}
+
+	public String getProfileImageUrl() {
+		return profileImageUrl;
 	}
 
 	public static interface DialogListener {
