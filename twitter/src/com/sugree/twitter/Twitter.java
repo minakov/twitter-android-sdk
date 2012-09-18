@@ -5,6 +5,7 @@ import twitter4j.TwitterException;
 import twitter4j.TwitterFactory;
 import twitter4j.auth.AccessToken;
 import twitter4j.auth.RequestToken;
+import twitter4j.conf.Configuration;
 import android.Manifest;
 import android.app.AlertDialog;
 import android.content.Context;
@@ -27,12 +28,6 @@ public class Twitter {
 	protected static final String SCREEN_NAME = "screen_name";
 	protected static final String PROFILE_IMAGE_URL = "profile_image_url";
 
-	protected static final String REQUEST_ENDPOINT = "https://api.twitter.com/1";
-
-	protected static final String OAUTH_REQUEST_TOKEN = "https://api.twitter.com/oauth/request_token";
-	protected static final String OAUTH_ACCESS_TOKEN = "https://api.twitter.com/oauth/access_token";
-	protected static final String OAUTH_AUTHORIZE = "https://api.twitter.com/oauth/authorize";
-
 	private RequestToken requestToken;
 	private String accessToken;
 	private String secretToken;
@@ -40,14 +35,15 @@ public class Twitter {
 	private String screenName;
 	private String profileImageUrl;
 
-	private final twitter4j.Twitter twitter;
+	private final Configuration conf;
+	private twitter4j.Twitter twitter;
 
-	public Twitter(String consumerKey, String consumerSecret) {
-		twitter = new TwitterFactory().getInstance();
-		twitter.setOAuthConsumer(consumerKey, consumerSecret);
+	public Twitter(Configuration conf) {
+		this.conf = conf;
 	}
 
 	public String retrieveRequestToken() throws TwitterException {
+		twitter = new TwitterFactory(conf).getInstance();
 		requestToken = twitter.getOAuthRequestToken(Twitter.CALLBACK_URI);
 		return requestToken.getAuthorizationURL();
 	}
